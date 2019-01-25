@@ -18,7 +18,7 @@ Bash Example
 --------
 ##### Script name: [*mod-firefox-preferences.sh*](../master/mod-firefox-preferences.sh)
 ##### Purpose of script:
-  Firefox lacks support to use *Integrated Windows Authentication* for SAML enabled single sign-on resourced by default and requires either manually enabling this support in the hidden configuration menu or custom preferences can be added to the main configuration file with a text editor.
+  Firefox lacks support to use *Integrated Windows Authentication* for SAML enabled single sign-on resources by default and requires either manually enabling this support in the hidden configuration menu or custom preferences can be added to the main configuration file with a text editor.
 ##### End Result:
   Using a combination of Jamf and Bash this script was able to add the custom configuration needed to support SSO for corporate resources without requiring the user to manually configure Firefox and eliminated help desk requests for configuring SSO with Firefox.
 
