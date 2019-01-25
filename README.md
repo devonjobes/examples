@@ -2,7 +2,7 @@ PowerShell Example
 --------
 ##### Script name: [*Get-AuthenticatedCompters*](../master/Get-AuthenticatedComputers.ps1)
 ##### Purpose of script:
-  Without the availabilty of a tool to generate a report for which computers were utilizing the office LAN I used the Windows Security Event log to track successfull Radius authentication for both wired and wireless networks and matched each computer to owner, connection type (wired or wireless) and what network device the computer connected to.
+  Without the availabilty of a tool to generate a report for how many computers were utilizing the office LAN I parsed the Windows Security Event log to track successfull Radius authentication for both wired and wireless networks and matched each computer to owner, connection type (wired or wireless) and what network device the computer connected to.
 ##### End Result:
   Daily CSV was created and emailed to business units who needed the data for processing.
 
