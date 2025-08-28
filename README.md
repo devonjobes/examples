@@ -8,19 +8,19 @@ PowerShell Example
 
 Python Example
 --------
-##### Script name: [*confluence-attachment-report.py*](../master/confluence-attachment-report.py)
+##### Script name: [*removeCustomUserData.py*](../master/removeCustomUserData.py)
 ##### Purpose of script:
-  In preparation to migrate Confluence data from an on-premise server to the Atlassian cloud, total Confluence attachments needed to be reduced significantly.  This report tracked status, size and owner of all attachments in Confluence and was emailed to project managers to track progress on a weekly basis.
+  Requests to remove all or partial data from custom attributes in OneLogin were repeated often, required an admin to log into the OneLogin admin portal to perform the action manually and could take anywhere from 5-15 minutes per request.
 ##### End Result:
-  Using the weekly report, project managers were able to reduce attachment data transfer requirements from over 250GB to under 70GB and lowered the data migration time to four hours.
+  This script reduced the admin processing from up to 15 minutes to less than 30 seconds for most requests.
 
 Bash Example
 --------
-##### Script name: [*mod-firefox-preferences.sh*](../master/mod-firefox-preferences.sh)
+##### Script name: [*AssignCiscoSecureClient.sh*](../master/AssignCiscoSecureClient.sh)
 ##### Purpose of script:
-  Firefox lacks support to use *Integrated Windows Authentication* for SAML enabled single sign-on resources by default and requires either manually enabling this support in the hidden configuration menu or custom preferences can be added to the main configuration file with a text editor.
+  To push out an update to the Cisco Secure Client, a Jamf Static Group was used to assign endpoints to a policy that upgraded the client once the endpoint was added to the group and sent an email notifing the endpoint owner that the client was being upgraded which lists initial troubleshooting steps and where to get help if needed.
 ##### End Result:
-  Using a combination of Jamf and Bash this script was able to add the custom configuration needed to support SSO for corporate resources without requiring the user to manually configure Firefox and eliminated help desk requests for configuring SSO with Firefox.
+  Allowed targeted roll-out of updated client to specific endpoints and eliminated hours of manual admin overhead time of adding endpoints to the Static Group and sending email notifications.  
 
 
 

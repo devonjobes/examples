@@ -15,7 +15,7 @@ IFS=$'\n\t'
 # | Created: 061424
 # | Version: 1.0
 # | Example:
-# | AssignCiscoSecureClient.sh -c C02DQ67WQ05P
+# | AssignCiscoSecureClient.sh -c [serial number of computer]
 # |     =======
 # |     -- Assigned C02DQ67WQ05P to App - Cisco Secure Connect Jamf group.
 # |     -- Sending notification to person@example.com.
@@ -134,7 +134,7 @@ Example Team
 
 EOF
 )
-AddToStaticGroup $getCompID 331
+AddToStaticGroup $getCompID [group ID number]
 #EmailNotification $getCompAssignedAccount $emailMessage
 echo -e "=======\n"
 
