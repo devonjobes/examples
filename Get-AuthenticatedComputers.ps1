@@ -97,7 +97,7 @@ Try
                     $logErrorSubject = "Having issues parsing log for: " + $server
                     $logErrorMessage = $server + ": issues parsing logs for " + $emailDate + "."
                     $logErrorRecipient = "recipient01@domain.com"
-                    Send-MailMessage -To $logErrorRecipient -From "sender@openx.com" -Subject $logErrorSubject -Body $logErrorMessage -SmtpServer 'mail-server.domain.com' -port '25' -DeliveryNotificationOption None
+                    Send-MailMessage -To $logErrorRecipient -From "sender@domain.com" -Subject $logErrorSubject -Body $logErrorMessage -SmtpServer 'mail-server.domain.com' -port '25' -DeliveryNotificationOption None
                     Continue
                 }
             else
@@ -169,10 +169,10 @@ Try
                 }
             else
                 {
-                    $emailRecipients = @("recipient02@openx.com","recipient03@domain.com")
+                    $emailRecipients = @("recipient02@domain.com","recipient03@domain.com")
                     $authenticatedComps | Export-Csv -Path $csvLocation -Force -NoTypeInformation
                     $emailSubject = $serverNameSwitched + ": authenticated computers report " + $emailDate + "."
-                    Send-MailMessage -To $emailRecipients -From "custom-report@openx.com" -Subject $emailSubject -Attachments $csvLocation -Body "All authenticated computers on the network report attached." -SmtpServer 'mail-server.domain.com' -port '25' -DeliveryNotificationOption None
+                    Send-MailMessage -To $emailRecipients -From "custom-report@domain.com" -Subject $emailSubject -Attachments $csvLocation -Body "All authenticated computers on the network report attached." -SmtpServer 'mail-server.domain.com' -port '25' -DeliveryNotificationOption None
                 }
 
             # | Time to catch up
