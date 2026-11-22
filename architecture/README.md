@@ -46,7 +46,7 @@ are illustrative.
 | **Host** | Single-node k3s on Ubuntu Server LTS, one small AMD APU |
 | **GPU** | AMD Radeon 890M iGPU (Strix Point, `gfx1150`), 32 GB unified memory, ~22 GiB usable Vulkan budget |
 | **Model** | gpt-oss-20b, MXFP4 quant (~11.3 GiB), served on llama.cpp **Vulkan** |
-| **Serving** | `llama-server` on :9090, OpenAI-compatible `/v1`, one slot, 131k context (the model's full trained window) |
+| **Serving** | `llama-server` on :9090, OpenAI-compatible `/v1`, one slot, 131k capacity (agent works at 32k) |
 | **Agent** | OpenClaw Gateway in namespace `openclaw` (:18789) |
 | **Search** | Shared SearXNG + FlareSolverr stack behind one MCP service |
 | **Ingress** | k3s Traefik, one hostname, path split `/llm` and `/`, TLS from a private CA |
@@ -187,6 +187,8 @@ private CA.**
 | D11 | Google Workspace via a CLI/MCP pair, plus a WhatsApp channel | The CLI gives Gmail/Drive/Docs/Sheets/Calendar tools and contacts without a browser; WhatsApp is a native channel with DM pairing and an open group policy | Gmail-as-a-channel (does not exist in this build); hosted Google MCP preview (not used) |
 | D12 | Config lives on the volume after first boot | The gateway can be reconfigured from the UI without losing state; the ConfigMap is a seed, not a live source | Treating the ConfigMap as authoritative — changes are silently ignored after first boot |
 | D13 | **One shared search stack** | Both consumers are MCP clients of one service: one metasearch config, one result cache, and one renderer/solver (the expensive part). Decoupled from the GPU pod's 12 GB model reloads | Two sets of sidecars; calling into the GPU pod's own search sidecar, which coupled search availability to model restarts |
+| D14 | **No speculative decoding** | Measured, not assumed: the EAGLE3 Q8 draft gave **7.15 t/s against 13.96** with only 9.2% draft acceptance. Generation here is bandwidth-bound, so the draft competes for the same bytes and low acceptance is a pure loss | EAGLE3 drafts shipped with the model; the build supports `draft-eagle3` |
+| D15 | **Rules-only workspace instructions** | `AGENTS.md` is injected every turn, so explanation was moved to `LLAMA.md`: 8,540 → 4,026 bytes (~1,100 tokens returned). Verified with a live turn: 24,111-token prompt, 465 new tokens | A prose-heavy rules file — reads better, costs budget on every request |
 
 ### 3.1 Why this host
 
@@ -317,6 +319,11 @@ Two things that look like misconfiguration and are not:
 - **`/health` returns 503 for minutes after start.** The model is being loaded from
   disk; startup probes allow for it.
 
+Speculative decoding was the one speed lever with real promise, and it failed on
+measurement: the EAGLE3 Q8 draft produced **7.15 t/s against 13.96** with 9.2% acceptance.
+On an iGPU the draft reads the same system memory as the target, so each rejected draft
+token is a full memory pass spent for nothing.
+
 ### 4.3 The GPU memory ceiling
 
 On an APU the GPU has no memory of its own: it addresses system RAM through the graphics
@@ -393,13 +400,15 @@ Three init containers, in order, because each depends on the previous:
 3. **Config seed.** Copies the gateway config and workspace rules from the ConfigMap
    **only if missing**, then prepares the writable `/tmp` subdirectory.
 
-### 5.2 Context budget
+### 5.2 Context budget and the static floor
 
-The gateway reserves the provider's `maxTokens` out of the declared context window
-before sizing a prompt:
+The server's `-c` is a capability ceiling; the gateway's `contextWindow` is the working
+set it fills before compacting. The gateway reserves its `maxTokens` out of whatever it
+is given:
 
 ```
-prompt budget = context window − maxTokens
+prompt budget = min(server -c, gateway contextWindow) − maxTokens
+              = min(131072, 131072) − 6144 = 124928
 ```
 
 The original split left the prompt budget a few thousand tokens short of a typical
@@ -408,12 +417,26 @@ before the model saw them — which presents as "the page came back empty" even 
 the fetch succeeded. Both numbers moved together: to 40,960 in the config, then to
 65,536, and finally to the model's full 131,072 once both GPU knobs were set.
 
-| Setting | Original | Now |
-|---|---|---|
-| Server context | 32,768 | 131,072 |
-| Gateway context window | 32,768 | 131,072 |
-| Gateway max output tokens | 8,192 | 6,144 |
-| Prompt budget | 24,576 | 124,928 |
+| Setting | Original | Now | Role |
+|---|---|---|---|
+| Server context | 32,768 | **131,072** | What the server allocates |
+| Gateway context window | 32,768 | **131,072** | What a turn may fill |
+| Gateway max output tokens | 8,192 | 6,144 | Output reserve |
+| Prompt budget | 24,576 | 124,928 | What compaction targets |
+
+**Every turn carries a fixed tax before any conversation.** System prompt, tool catalog
+and workspace rules are sent on each request. Measured on a fresh session, a one-word
+message produced an **18,805-token** prompt; `AGENTS.md` alone was 2,140 of those.
+
+That tax costs **budget**, not **time** — a live turn reported `promptTokens 24111` while
+only **465** tokens were new, the other 23,646 served from the prompt cache. So the floor
+is paid once per session in prefill and every turn in headroom. At a 32k working window
+it left ~5.7k for conversation and compaction ran constantly; at 131k it is noise.
+
+The rules file was therefore trimmed to **rules only** — 8,540 bytes down to 4,026, about
+1,100 tokens returned — with its explanatory prose and CLI examples moved to the server
+runbook. Splitting instructions from explanation is what keeps the per-turn tax from
+crowding out the conversation.
 
 **The failure mode is drift between the two sides.** For a while the gateway's config
 declared 40,960 while the server still ran 32,768, because the manifest had been edited
@@ -422,12 +445,22 @@ truncated; the real budget was 26,624. The number that matters is
 `min(server, gateway) − maxTokens`, so both sides change in the same pass, and the check
 afterwards is the server's own `n_ctx_slot`, not the config file.
 
-The full 4× move cost 2.9 GiB of KV cache and was proven by sending a 120,476-token
-prompt through the service and getting a 200 back — not by reading the config. Prompt
-throughput falls with length, as it must: about 630 t/s at 57k tokens, 227 t/s at 120k,
-because attention cost grows with the window. A full-window turn therefore spends roughly
-nine minutes in prompt processing before the first token comes back — the window is
-headroom for the occasional long document, not a target for every turn.
+**Why the gateway stays at 32k while the server has 131k.** Prompt length is paid
+twice: once in prefill before the first token, and again in attention on every generated
+token. Measured on this host:
+
+| Context | Generation | Prefill |
+|---|---|---|
+| ~0 tokens | 13.9 t/s | — |
+| 37k tokens | 10.7 t/s | 265–400 t/s |
+| 62k tokens | 9.3 t/s | 329 t/s |
+
+Letting the agent accumulate history toward 120k therefore costs speed on every token and
+turns any prompt-cache miss into minutes of prefill. Capping the working set keeps turns
+in the fast part of the curve; the 131k allocation stays available — and costs memory,
+not speed — for occasional long documents sent to the API directly. The 4× move was
+verified with a 120,476-token prompt returning 200, which is exactly the case the big
+window is for.
 
 When prompts still grow, the levers are the tool catalog and the workspace rules, not
 the window: a trimmed search schema, capped result counts and result sizes, and
@@ -454,6 +487,13 @@ authoritative:
 - changes made through the UI survive restarts;
 - editing the ConfigMap alone changes nothing — including bind mode, allowed origins,
   trusted proxies, providers, channels, MCP servers and agents.
+
+Workspace instruction files have a second layer on top of that: they are also stored as a
+snapshot in the gateway's state database, which is imported over the file at startup. A
+file edited on disk, or deleted and re-seeded from the ConfigMap, is therefore replaced by
+the snapshot on the next boot — with the edited copy kept as `.bak`. Writes must go
+through the gateway (the agent's file tools, or the UI's Files panel) so both copies move
+together.
 
 That is a good property (no lost UI edits) with a sharp edge (a "config change" that
 appears to do nothing). Deliberate reseeds discard UI changes and **drop plugin
